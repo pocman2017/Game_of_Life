@@ -1,0 +1,361 @@
+// GAME OF LIFE
+
+/*------------------------------
+
+          TO DO LIST
+1. --put double array into the function
+2. --draw game field
+3. --create main cycle with step by step work
+4. --redirection stdin from file
+5. --realize live and death of cell
+6. --out of field boundary
+7. --next step with space
+
+--------------------------------*/
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+
+void start(int **matrix, int **prev);
+int setMode();
+
+void show(int **a, int WIDTH, int HEIGHT);
+
+void createZero(int **matrix, int w, int h);
+void fillField(int **matrix_1, int **matrix_2, int w, int h);
+void fillFromEnternal(int **matrix, int w, int h);
+int fillFromSTDIN(int **matrix, int w);
+
+void gameCycle(int **matrix, int **prev, int w, int h, int mode);
+void CHECK_EDIT(int **matrix, int **prev, int h, int w);
+int Nsosedi(int **matrix, int i, int j);
+int CHECK_FINISH_NULL(int **matrix, int h, int w);
+int CHECK_FINISH_NOCHANGE(int **matrix, int **result, int h, int w);
+
+int manager(int *x, int *y);
+
+#define WIDTH 80
+#define HEIGHT 25
+
+//--------------------------------------
+
+int main() {
+  int A[HEIGHT][WIDTH];
+  int B[WIDTH][HEIGHT];
+
+  start((int **)A, (int **)B);
+
+  return 0;
+}
+
+//--------------------------------------
+
+void start(int **matrix, int **prev) {
+  int enterFLag = fillFromSTDIN(matrix, WIDTH);
+  if (enterFLag == 1) {
+    fillFromEnternal(matrix, WIDTH, HEIGHT);
+  }
+  if (enterFLag != 2) {
+    // createZero(matrix, WIDTH, HEIGHT);
+    int mode = setMode();
+    if (mode != 2) {
+      gameCycle(matrix, prev, WIDTH, HEIGHT, mode);
+    }
+  }
+}
+
+/*------------------------------------------
+устанавливает режим "игры"
+-------------------------------------------*/
+int setMode() {
+  printf("Enter 0 to setup in step by step mode or 1 to setup auto mode\n");
+  int mode = 0;
+  if (scanf("%d", &mode) != 1 || ((mode != 0) && (mode != 1))) {
+    printf("n/a");
+    mode = 2;
+  }
+  getc(stdin);
+  return mode;
+}
+
+/*------------------------------------------
+Обнуляет поле
+-------------------------------------------*/
+void createZero(int **matrix, int w, int h) {
+  int *ptr = (int *)matrix;
+  int val = 0;
+  for (int i = 0; i < h; i++) {
+    for (int j = 0; j < w; j++) {
+      // printf("HERE!\n");  //  Для проверки
+      val = !val;
+      ptr[j + w * i] = 0;
+    }
+  }
+}
+
+/*------------------------------------------
+заполняет второе поле значениями из первого
+-------------------------------------------*/
+void fillField(int **matrix_1, int **matrix_2, int w, int h) {
+  int *A = (int *)matrix_1;
+  int *B = (int *)matrix_2;
+  for (int i = 0; i < h; i++) {
+    for (int j = 0; j < w; j++) {
+      B[j + w * i] = A[j + w * i];
+    }
+  }
+}
+
+/*------------------------------------------
+заполняет поле значениями из файла
+-------------------------------------------*/
+void fillFromEnternal(int **matrix, int w, int h) {
+  // printf("Y)!\n");
+  int *A = (int *)matrix;
+
+  char temp;
+  for (int i = 0; i < h; i++) {
+    for (int j = 0; j < w; j++) {
+      temp = getc(stdin);
+      if (temp == '\n') temp = getc(stdin);
+      if (temp == '#') {
+        // printf("%d %d\n", j, i);
+        // printf("");
+        A[j + w * i] = 1;
+      } else {
+        A[j + w * i] = 0;
+      }
+      if (temp == EOF) break;
+    }
+    if (temp == EOF) break;
+  }
+  freopen("/dev/tty", "r", stdin);
+}
+
+/*------------------------------------------
+заполняет поле значениями из stdin
+-------------------------------------------*/
+int fillFromSTDIN(int **matrix, int w) {
+  printf("Press enter to continue\n");
+  int *A = (int *)matrix;
+  int errorCode = 0;
+  char temp = ungetc(getc(stdin), stdin);
+  if (temp == '-' || temp == '#') {
+    errorCode = 1;
+  } else {
+    int quant = 0;
+    printf("Enter the quantity of entrance cells\n");
+    if (!scanf("%d", &quant) || quant < 0) {
+      printf("n/a");
+      errorCode = 2;
+    }
+    if (errorCode != 2) {
+      printf("Enter coordinates of cells in format \"x y\"\n");
+      createZero(matrix, WIDTH, HEIGHT);
+      int x;
+      int y;
+      for (int i = 0; i < quant; i++) {
+        if (!scanf("%d %d", &x, &y) || x < 0 || x >= WIDTH || y < 0 ||
+            y >= HEIGHT) {
+          printf("n/a");
+          errorCode = 2;
+          break;
+        } else {
+          A[x + y * w] = 1;
+        }
+      }
+      getc(stdin);
+    }
+  }
+  return errorCode;
+}
+
+/*------------------------------------------
+выводит поле на экран
+-------------------------------------------*/
+void show(int **a, int w, int h /*, int inputVal*/) {  //  Рисуем поле
+  printf("\033[2J");
+  // printf("\n");
+
+  int *ptr = (int *)a;
+
+  // ptr[0] = 1;  // Для проверки
+
+  for (int i = 0; i < h; i++) {
+    for (int j = 0; j < w; j++) {
+      // ptr[j + w * i] = 1;  //  Для проверки
+      // printf("%d %d", i, j);
+      if (ptr[j + w * i]) {
+        // printf("%d %d", j, i);
+        printf("#");
+      } else {
+        printf("-");
+      }
+    }
+    printf("\n");
+  }
+  printf("\n");
+}
+
+/*------------------------------------------
+основной игровой цикл/шаг
+-------------------------------------------*/
+void gameCycle(int **matrix, int **prev, int w, int h, int mode) {
+  // char choose = '\0';
+  int condintion = 1;
+  int speed = 1;
+
+  show(matrix, w, h);
+  fillField(matrix, prev, w, h);
+
+  if (!mode) {
+    // choose = getc(stdin);
+    system("stty raw");
+    // FILE *stream = popen("/bin/stty -g -icrnl -ocrnl", "r");
+    condintion = (getc(stdin) == ' ');  // && getc(stdin) == '\n');
+    system("stty cooked");
+    // pclose(stream);
+  } else {
+    printf("Enter speed of auto mode\n");
+    if (!scanf("%d", &speed)) printf("n/a");
+  }
+
+  while (condintion) {
+    if (speed <= 0) break;
+    CHECK_EDIT(matrix, prev, h, w);
+
+    if (CHECK_FINISH_NULL(matrix, h, w) == 0 ||
+        CHECK_FINISH_NOCHANGE(matrix, prev, h, w) == 0)
+      break;
+    fillField(matrix, prev, w, h);
+    show(matrix, w, h);
+    if (mode) {
+      usleep(1000000 / speed);
+    } else {
+      system("stty raw");
+      // choose = getc(stdin);
+      condintion = (getc(stdin) == ' ');
+      system("stty cooked");
+    }
+  }
+  show(matrix, w, h);
+}
+
+/*------------------------------------------
+логика всех клеток на поле
+-------------------------------------------*/
+void CHECK_EDIT(int **matrix, int **prev, int h, int w) {
+  int *A = (int *)matrix;
+  // int *B = (int *)prev;  // Паша добавил строку
+  for (int i = 0; i < h; i++) {
+    for (int j = 0; j < w; j++) {
+      int N = Nsosedi(prev, i, j);
+
+      // если соседей 3, то рожаем
+      if (N == 3) {
+        A[j + w * i] = 1;
+      }
+
+      // если соседей не 2 и не 3, то убиваем
+      if (N != 2 && N != 3) {
+        A[j + w * i] = 0;
+      }
+    }
+  }
+}
+
+/*------------------------------------------
+подсчет количества соседей
+-------------------------------------------*/
+int Nsosedi(int **matrix, int i, int j) {
+  int *B = (int *)matrix;
+  int N = 0;
+  // проверка каждого соседа
+
+  int _i = i - 1;
+  int _j = j - 1;
+  int i_ = i + 1;
+  int j_ = j + 1;
+  if (_j < 0) {
+    // printf("1Yo!\n");
+    _j = 79;
+  } else if (j_ == WIDTH) {
+    // printf("2Yo!\n");
+    j_ = 0;
+  }
+  if (_i < 0) {
+    // printf("3Yo!\n");
+    _i = 24;
+  } else if (i_ == HEIGHT) {
+    // printf("4Yo!\n");
+    i_ = 0;
+  }
+
+  if (B[_j + WIDTH * _i] == 1) {
+    N++;
+  }
+  if (B[_j + WIDTH * i] == 1) {
+    N++;
+  }
+  if (B[_j + WIDTH * i_] == 1) {
+    N++;
+  }
+  if (B[j + WIDTH * _i] == 1) {
+    N++;
+  }
+  if (B[j + WIDTH * i_] == 1) {
+    N++;
+  }
+  if (B[j_ + WIDTH * _i] == 1) {
+    N++;
+  }
+  if (B[j_ + WIDTH * i] == 1) {
+    N++;
+  }
+  if (B[j_ + WIDTH * i_] == 1) {
+    N++;
+  }
+  return N;
+}
+
+/*------------------------------------------
+проверка на полное вымирание клеток
+-------------------------------------------*/
+int CHECK_FINISH_NULL(int **matrix, int h, int w) {
+  int *A = (int *)matrix;
+  int N1 = 0;
+  int res = 0;
+  for (int i = 0; i < h; i++) {
+    for (int j = 0; j < w; j++) {
+      if (A[j + i * w] == 1) {
+        N1++;
+      }
+    }
+  }
+  if (N1 > 0) {
+    res = 1;
+  }
+  return res;
+}
+
+/*------------------------------------------
+проверка на "застой" игового поля
+-------------------------------------------*/
+int CHECK_FINISH_NOCHANGE(int **matrix, int **result, int h, int w) {
+  int *A = (int *)matrix;
+  int *B = (int *)result;
+  int Nchanges = 0;
+  int res = 0;
+  for (int i = 0; i < h; i++) {
+    for (int j = 0; j < w; j++) {
+      if (A[j + i * w] != B[j + i * w]) {
+        Nchanges++;
+      }
+    }
+  }
+  if (Nchanges > 0) {
+    res = 1;
+  }
+  return res;
+}
